@@ -15,6 +15,10 @@ Production-oriented Raspberry Pi 5 project for motion-triggered patient monitori
 |-- deploy/
 |   `-- patient-monitor.service
 |-- main.py
+|-- scripts/
+|   `-- install_service.sh
+|-- tests/
+|   `-- test_main.py
 `-- requirements.txt
 ```
 
@@ -28,6 +32,8 @@ Production-oriented Raspberry Pi 5 project for motion-triggered patient monitori
 - Graceful shutdown support for production deployment on Raspberry Pi OS
 - GitHub Actions validation for every push and pull request
 - `systemd` service template for unattended boot-time startup
+- Bootstrap script to install, configure, and enable the service on a Raspberry Pi
+- Unit tests for async inactivity, recording, and upload flows
 
 ## Hardware Wiring
 
@@ -83,7 +89,19 @@ Production-oriented Raspberry Pi 5 project for motion-triggered patient monitori
 ## Production Deployment with systemd
 
 1. Copy the repository to the Raspberry Pi, for example into `/opt/iot-patient-monitor`.
-2. Create the virtual environment and install dependencies:
+2. Fast path: run the installer script as root to copy files, create the virtualenv, install dependencies, and register the `systemd` service.
+
+	```bash
+	sudo bash scripts/install_service.sh
+	```
+
+   Optional overrides:
+
+	```bash
+	sudo APP_DIR=/srv/patient-monitor SERVICE_USER=pi SERVICE_GROUP=pi bash scripts/install_service.sh
+	```
+
+3. If you prefer manual setup, create the virtual environment and install dependencies:
 
 	```bash
 	cd /opt/iot-patient-monitor
@@ -92,9 +110,9 @@ Production-oriented Raspberry Pi 5 project for motion-triggered patient monitori
 	pip install -r requirements.txt
 	```
 
-3. Copy `.env.example` to `.env` and add your production Azure connection strings.
-4. Review [deploy/patient-monitor.service](/workspaces/IOT/deploy/patient-monitor.service) and adjust `User`, `Group`, `WorkingDirectory`, `EnvironmentFile`, and `ExecStart` if your install path or Linux user differs.
-5. Install and start the service:
+4. Copy `.env.example` to `.env` and add your production Azure connection strings.
+5. Review [deploy/patient-monitor.service](/workspaces/IOT/deploy/patient-monitor.service) and adjust `User`, `Group`, `WorkingDirectory`, `EnvironmentFile`, and `ExecStart` if your install path or Linux user differs.
+6. Install and start the service:
 
 	```bash
 	sudo cp deploy/patient-monitor.service /etc/systemd/system/patient-monitor.service
@@ -103,11 +121,13 @@ Production-oriented Raspberry Pi 5 project for motion-triggered patient monitori
 	sudo systemctl start patient-monitor.service
 	```
 
-6. Inspect logs if needed:
+7. Inspect logs if needed:
 
 	```bash
 	sudo journalctl -u patient-monitor.service -f
 	```
+
+The installer script is stored in [scripts/install_service.sh](/workspaces/IOT/scripts/install_service.sh).
 
 ## Environment Variables
 
@@ -168,5 +188,11 @@ Production-oriented Raspberry Pi 5 project for motion-triggered patient monitori
 ## Continuous Integration
 
 - GitHub Actions runs on pushes to `main` and on pull requests.
-- The workflow installs dependencies and validates `main.py` with `python -m py_compile`.
+- The workflow installs dependencies, validates `main.py` with `python -m py_compile`, and runs unit tests under `tests/`.
 - The workflow file is stored in [.github/workflows/ci.yml](/workspaces/IOT/.github/workflows/ci.yml).
+
+## Test Suite
+
+- Run the local unit tests with `python -m unittest discover -s tests -p "test_*.py" -v`.
+- The tests use mocks instead of real GPIO, camera, or Azure hardware so they can run in CI and on developer machines.
+- The current test module is [tests/test_main.py](/workspaces/IOT/tests/test_main.py).
