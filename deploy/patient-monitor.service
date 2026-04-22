@@ -1,0 +1,19 @@
+[Unit]
+Description=IoT Patient Monitoring Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/iot-patient-monitor
+EnvironmentFile=/opt/iot-patient-monitor/.env
+ExecStart=/opt/iot-patient-monitor/.venv/bin/python /opt/iot-patient-monitor/main.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

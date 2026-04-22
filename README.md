@@ -6,9 +6,14 @@ Production-oriented Raspberry Pi 5 project for motion-triggered patient monitori
 
 ```text
 .
+|-- .github/
+|   `-- workflows/
+|       `-- ci.yml
 |-- .env.example
 |-- .gitignore
 |-- README.md
+|-- deploy/
+|   `-- patient-monitor.service
 |-- main.py
 `-- requirements.txt
 ```
@@ -21,6 +26,8 @@ Production-oriented Raspberry Pi 5 project for motion-triggered patient monitori
 - Fall detection / inactivity alert logic: motion followed by no motion for a configurable period
 - Environment-based configuration with `python-dotenv`
 - Graceful shutdown support for production deployment on Raspberry Pi OS
+- GitHub Actions validation for every push and pull request
+- `systemd` service template for unattended boot-time startup
 
 ## Hardware Wiring
 
@@ -71,6 +78,35 @@ Production-oriented Raspberry Pi 5 project for motion-triggered patient monitori
 
 	```bash
 	python main.py
+	```
+
+## Production Deployment with systemd
+
+1. Copy the repository to the Raspberry Pi, for example into `/opt/iot-patient-monitor`.
+2. Create the virtual environment and install dependencies:
+
+	```bash
+	cd /opt/iot-patient-monitor
+	python3 -m venv .venv
+	source .venv/bin/activate
+	pip install -r requirements.txt
+	```
+
+3. Copy `.env.example` to `.env` and add your production Azure connection strings.
+4. Review [deploy/patient-monitor.service](/workspaces/IOT/deploy/patient-monitor.service) and adjust `User`, `Group`, `WorkingDirectory`, `EnvironmentFile`, and `ExecStart` if your install path or Linux user differs.
+5. Install and start the service:
+
+	```bash
+	sudo cp deploy/patient-monitor.service /etc/systemd/system/patient-monitor.service
+	sudo systemctl daemon-reload
+	sudo systemctl enable patient-monitor.service
+	sudo systemctl start patient-monitor.service
+	```
+
+6. Inspect logs if needed:
+
+	```bash
+	sudo journalctl -u patient-monitor.service -f
 	```
 
 ## Environment Variables
@@ -128,3 +164,9 @@ Production-oriented Raspberry Pi 5 project for motion-triggered patient monitori
 - For service deployment, use `systemd` and point the unit to the virtual environment Python binary.
 - Keep `.env` out of source control.
 - Review container existence and Azure RBAC/networking rules before production rollout.
+
+## Continuous Integration
+
+- GitHub Actions runs on pushes to `main` and on pull requests.
+- The workflow installs dependencies and validates `main.py` with `python -m py_compile`.
+- The workflow file is stored in [.github/workflows/ci.yml](/workspaces/IOT/.github/workflows/ci.yml).
