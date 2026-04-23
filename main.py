@@ -15,7 +15,7 @@ from uuid import uuid4
 from azure.iot.device import Message
 from azure.iot.device.aio import IoTHubDeviceClient
 from azure.core.exceptions import ResourceExistsError
-from azure.storage.blob import BlobServiceClient
+from azure.storage.blob import BlobServiceClient, ContentSettings
 from dotenv import load_dotenv
 from gpiozero import MotionSensor
 
@@ -37,6 +37,7 @@ class Settings:
     video_height: int = 720
     video_framerate: int = 30
     motion_poll_interval_seconds: float = 0.2
+    camera_preview: bool = True
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -71,6 +72,8 @@ class Settings:
             video_height=int(os.getenv("VIDEO_HEIGHT", "720")),
             video_framerate=int(os.getenv("VIDEO_FRAMERATE", "30")),
             motion_poll_interval_seconds=float(os.getenv("MOTION_POLL_INTERVAL_SECONDS", "0.2")),
+            camera_preview=os.getenv("CAMERA_PREVIEW", "true").strip().lower()
+            in {"1", "true", "yes", "on"},
         )
 
 
@@ -230,6 +233,18 @@ class PatientMonitoringSystem:
             )
         )
 
+        self._track_task(
+            asyncio.create_task(
+                self._upload_motion_event(
+                    event_type="motionDetected",
+                    event_time=motion_time,
+                    extra={
+                        "pirPin": self.settings.pir_gpio_pin,
+                    },
+                )
+            )
+        )
+
         if self.recording_lock.locked():
             LOGGER.info("Motion detected while recording is already in progress")
             return
@@ -242,6 +257,18 @@ class PatientMonitoringSystem:
             return
 
         self.last_no_motion_at = datetime.now(timezone.utc)
+
+        self._track_task(
+            asyncio.create_task(
+                self._upload_motion_event(
+                    event_type="noMotionDetected",
+                    event_time=self.last_no_motion_at,
+                    extra={
+                        "lastMotionDetectedAt": self.last_motion_detected_at.isoformat(),
+                    },
+                )
+            )
+        )
 
         if self.inactivity_task:
             self.inactivity_task.cancel()
@@ -331,6 +358,9 @@ class PatientMonitoringSystem:
             str(video_path),
         ]
 
+        if not self.settings.camera_preview:
+            command.append("--nopreview")
+
         process = await asyncio.create_subprocess_exec(
             *command,
             stdout=asyncio.subprocess.PIPE,
@@ -345,6 +375,41 @@ class PatientMonitoringSystem:
 
         if stdout:
             LOGGER.debug("rpicam-vid output: %s", stdout.decode().strip())
+
+    async def _upload_motion_event(
+        self,
+        event_type: str,
+        event_time: datetime,
+        extra: Optional[dict] = None,
+    ) -> None:
+        event_payload = {
+            "eventType": event_type,
+            "deviceId": self.settings.device_id,
+            "timestamp": event_time.isoformat(),
+            "pirPin": self.settings.pir_gpio_pin,
+        }
+        if extra:
+            event_payload.update(extra)
+
+        date_path = event_time.strftime("%Y/%m/%d")
+        blob_name = (
+            f"motion-events/{date_path}/"
+            f"{event_type}-{event_time.strftime('%Y%m%dT%H%M%S%fZ')}-{uuid4().hex[:8]}.json"
+        )
+        blob_client = self.blob_service_client.get_blob_client(
+            container=self.settings.blob_container_name,
+            blob=blob_name,
+        )
+
+        def upload() -> None:
+            blob_client.upload_blob(
+                json.dumps(event_payload).encode("utf-8"),
+                overwrite=True,
+                content_settings=ContentSettings(content_type="application/json"),
+            )
+
+        await asyncio.to_thread(upload)
+        LOGGER.info("Motion event uploaded to blob storage: %s", blob_name)
 
     async def _upload_video(
         self,

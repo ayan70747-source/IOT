@@ -74,6 +74,18 @@ class PatientMonitoringSystemAsyncTests(unittest.IsolatedAsyncioTestCase):
 
         system._send_telemetry.assert_not_awaited()
 
+    async def test_on_motion_detected_uploads_motion_event(self) -> None:
+        system = self.build_system()
+        system._send_telemetry = AsyncMock()
+        system._upload_motion_event = AsyncMock()
+        system._capture_and_publish_workflow = AsyncMock()
+        system.inactivity_task = None
+
+        await system._on_motion_detected()
+        await asyncio.sleep(0)
+
+        self.assertTrue(system._upload_motion_event.await_count >= 1)
+
     async def test_capture_and_publish_workflow_records_uploads_and_emits_telemetry(self) -> None:
         system = self.build_system()
         motion_time = datetime(2026, 4, 22, 12, 0, tzinfo=timezone.utc)

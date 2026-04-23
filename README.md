@@ -26,7 +26,9 @@ Production-oriented Raspberry Pi 5 project for motion-triggered patient monitori
 
 - Non-blocking motion detection using `gpiozero.MotionSensor` and `asyncio`
 - 5-second video recording with `rpicam-vid`
+- Optional automatic camera preview during motion recording when running in a desktop session
 - Concurrent Azure Blob upload and Azure IoT Hub telemetry after each capture
+- Motion detection result JSON uploads to Azure Blob Storage under `motion-events/`
 - Fall detection / inactivity alert logic: motion followed by no motion for a configurable period
 - Environment-based configuration with `python-dotenv`
 - Graceful shutdown support for production deployment on Raspberry Pi OS
@@ -120,6 +122,7 @@ Follow these steps in order on the Raspberry Pi.
 	- `IOT_CONNECTION_STRING`
 	- `STORAGE_CONNECTION_STRING`
 	- `GPIOZERO_PIN_FACTORY=lgpio`
+	- `CAMERA_PREVIEW=true`
 	- Optional: `LOG_LEVEL=DEBUG`
 
 5. Start the app:
@@ -140,6 +143,7 @@ Follow these steps in order on the Raspberry Pi.
 
 8. Confirm motion and recording logs appear:
 	- `Telemetry sent: motionDetected`
+	- `Motion event uploaded to blob storage:`
 	- `Starting video capture:`
 	- `Capture workflow completed`
 	- `Telemetry sent: videoUploaded`
@@ -155,6 +159,7 @@ Follow these steps in order on the Raspberry Pi.
 10. Confirm upload in Azure Blob Storage:
 	 - Open your storage account container (default `patient-monitoring`).
 	 - Open the `videos/` path and verify the same filename appears.
+	 - Open the `motion-events/` path and verify JSON event files are created.
 
 If motion is still not detected, go to [Raspberry Pi Hardware Troubleshooting](README.md#raspberry-pi-hardware-troubleshooting).
 
@@ -217,6 +222,7 @@ The installer script is stored in [scripts/install_service.sh](/workspaces/IOT/s
 | `VIDEO_HEIGHT` | No | Capture height |
 | `VIDEO_FRAMERATE` | No | Capture frame rate |
 | `MOTION_POLL_INTERVAL_SECONDS` | No | Motion state polling interval used for edge detection fallback, defaults to `0.2` |
+| `CAMERA_PREVIEW` | No | Show camera preview during recording (`true` or `false`), defaults to `true` |
 | `LOG_LEVEL` | No | Logging verbosity |
 
 ## Azure Portal Configuration
