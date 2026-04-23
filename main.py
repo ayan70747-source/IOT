@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import signal
 import sys
 from contextlib import suppress
@@ -35,6 +36,7 @@ class Settings:
     video_width: int = 1280
     video_height: int = 720
     video_framerate: int = 30
+    motion_poll_interval_seconds: float = 0.2
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -68,6 +70,7 @@ class Settings:
             video_width=int(os.getenv("VIDEO_WIDTH", "1280")),
             video_height=int(os.getenv("VIDEO_HEIGHT", "720")),
             video_framerate=int(os.getenv("VIDEO_FRAMERATE", "30")),
+            motion_poll_interval_seconds=float(os.getenv("MOTION_POLL_INTERVAL_SECONDS", "0.2")),
         )
 
 
@@ -86,6 +89,7 @@ class PatientMonitoringSystem:
         self.recording_lock = asyncio.Lock()
         self.inactivity_task: Optional[asyncio.Task] = None
         self.background_tasks: set[asyncio.Task] = set()
+        self.motion_poll_task: Optional[asyncio.Task] = None
         self.last_motion_detected_at: Optional[datetime] = None
         self.last_no_motion_at: Optional[datetime] = None
         self.alert_sent_for_cycle = False
@@ -99,9 +103,10 @@ class PatientMonitoringSystem:
         self.iot_connected = True
         await self._ensure_container_exists()
         self._register_signal_handlers()
+        self._log_runtime_diagnostics()
 
-        self.motion_sensor.when_motion = self._handle_motion_detected
-        self.motion_sensor.when_no_motion = self._handle_motion_stopped
+        self.motion_poll_task = asyncio.create_task(self._poll_motion_state())
+        self._track_task(self.motion_poll_task)
 
         LOGGER.info(
             "Patient monitoring started on GPIO %s with inactivity timeout %ss",
@@ -111,8 +116,11 @@ class PatientMonitoringSystem:
         await self.shutdown_event.wait()
 
     async def stop(self) -> None:
-        self.motion_sensor.when_motion = None
-        self.motion_sensor.when_no_motion = None
+        if self.motion_poll_task:
+            self.motion_poll_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self.motion_poll_task
+
         self.motion_sensor.close()
 
         if self.inactivity_task:
@@ -147,13 +155,36 @@ class PatientMonitoringSystem:
             except NotImplementedError:
                 signal.signal(sig, lambda *_: self.shutdown_event.set())
 
-    def _handle_motion_detected(self) -> None:
-        assert self.loop is not None
-        self.loop.call_soon_threadsafe(self._schedule_motion_detected)
+    def _log_runtime_diagnostics(self) -> None:
+        pin_factory_name = type(self.motion_sensor.pin_factory).__name__
+        LOGGER.info("GPIO pin factory in use: %s", pin_factory_name)
 
-    def _handle_motion_stopped(self) -> None:
-        assert self.loop is not None
-        self.loop.call_soon_threadsafe(self._schedule_motion_stopped)
+        if pin_factory_name.lower().startswith("native"):
+            LOGGER.warning(
+                "Running with NativeFactory fallback. Install lgpio on Raspberry Pi for more reliable GPIO events."
+            )
+
+        if shutil.which("rpicam-vid") is None:
+            LOGGER.error(
+                "rpicam-vid is not available on PATH. Install Raspberry Pi camera tools or verify Camera Module setup."
+            )
+
+    async def _poll_motion_state(self) -> None:
+        previous_state = self.motion_sensor.motion_detected
+        LOGGER.info(
+            "Starting motion polling loop at %.3fs interval",
+            self.settings.motion_poll_interval_seconds,
+        )
+
+        while not self.shutdown_event.is_set():
+            current_state = self.motion_sensor.motion_detected
+            if current_state and not previous_state:
+                self._schedule_motion_detected()
+            elif previous_state and not current_state:
+                self._schedule_motion_stopped()
+
+            previous_state = current_state
+            await asyncio.sleep(self.settings.motion_poll_interval_seconds)
 
     def _schedule_motion_detected(self) -> None:
         task = asyncio.create_task(self._on_motion_detected())

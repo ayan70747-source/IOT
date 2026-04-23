@@ -144,6 +144,7 @@ The installer script is stored in [scripts/install_service.sh](/workspaces/IOT/s
 | `VIDEO_WIDTH` | No | Capture width |
 | `VIDEO_HEIGHT` | No | Capture height |
 | `VIDEO_FRAMERATE` | No | Capture frame rate |
+| `MOTION_POLL_INTERVAL_SECONDS` | No | Motion state polling interval used for edge detection fallback, defaults to `0.2` |
 | `LOG_LEVEL` | No | Logging verbosity |
 
 ## Azure Portal Configuration
@@ -184,6 +185,28 @@ The installer script is stored in [scripts/install_service.sh](/workspaces/IOT/s
 - For service deployment, use `systemd` and point the unit to the virtual environment Python binary.
 - Keep `.env` out of source control.
 - Review container existence and Azure RBAC/networking rules before production rollout.
+
+## Raspberry Pi Hardware Troubleshooting
+
+- If logs show `PinFactoryFallback` warnings, install a supported GPIO backend:
+
+	```bash
+	sudo apt update
+	sudo apt install -y python3-lgpio
+	```
+
+- You can then force the backend in your `.env` or service environment:
+
+	```bash
+	GPIOZERO_PIN_FACTORY=lgpio
+	```
+
+- Verify camera tooling is installed and the camera is detected:
+
+	```bash
+	which rpicam-vid
+	rpicam-hello -t 3000
+	```
 
 ## Continuous Integration
 

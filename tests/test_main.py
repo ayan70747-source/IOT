@@ -17,7 +17,7 @@ class SettingsTests(unittest.TestCase):
             "STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=acct;AccountKey=key;EndpointSuffix=core.windows.net",
         }
 
-        with patch.dict(os.environ, env, clear=True):
+        with patch("main.load_dotenv"), patch.dict(os.environ, env, clear=True):
             settings = main.Settings.from_env()
 
         self.assertEqual(settings.pir_gpio_pin, 17)
@@ -26,7 +26,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.blob_container_name, "patient-monitoring")
 
     def test_from_env_raises_when_required_values_are_missing(self) -> None:
-        with patch.dict(os.environ, {}, clear=True):
+        with patch("main.load_dotenv"), patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(ValueError):
                 main.Settings.from_env()
 
