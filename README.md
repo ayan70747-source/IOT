@@ -86,6 +86,78 @@ Production-oriented Raspberry Pi 5 project for motion-triggered patient monitori
 	python main.py
 	```
 
+## Quick Start: See Motion Detection and Video Capture on Raspberry Pi
+
+Follow these steps in order on the Raspberry Pi.
+
+1. Install OS packages used by camera and reliable GPIO access:
+
+		  ```bash
+		  sudo apt update
+		  sudo apt install -y python3-lgpio rpicam-apps
+		  ```
+
+2. Verify the camera works before running the app:
+
+		  ```bash
+		  rpicam-hello -t 3000
+		  which rpicam-vid
+		  ```
+
+	Expected result: a 3-second camera preview opens, and `rpicam-vid` prints a valid path.
+
+3. Configure the project and install dependencies:
+
+		  ```bash
+		  cd /home/pi/Downloads/IOT-main
+		  python3 -m venv .venv
+		  source .venv/bin/activate
+		  pip install -r requirements.txt
+		  cp .env.example .env
+		  ```
+
+4. Edit `.env` and set your real values:
+	- `IOT_CONNECTION_STRING`
+	- `STORAGE_CONNECTION_STRING`
+	- `GPIOZERO_PIN_FACTORY=lgpio`
+	- Optional: `LOG_LEVEL=DEBUG`
+
+5. Start the app:
+
+		  ```bash
+		  source .venv/bin/activate
+		  python main.py
+		  ```
+
+6. Confirm startup logs are healthy:
+	- Look for `Successfully connected to Hub`
+	- Look for `GPIO pin factory in use:` and confirm it is not `NativeFactory`
+	- Look for `Starting motion polling loop`
+
+7. Trigger the PIR sensor with movement.
+	- Wave a hand in front of the PIR sensor for 2 to 5 seconds.
+	- Wait for the sensor delay period to settle (many PIR modules need a short cooldown).
+
+8. Confirm motion and recording logs appear:
+	- `Telemetry sent: motionDetected`
+	- `Starting video capture:`
+	- `Capture workflow completed`
+	- `Telemetry sent: videoUploaded`
+
+9. Confirm the video exists locally:
+
+		  ```bash
+		  ls -lh recordings
+		  ```
+
+	Expected result: one or more files named like `motion-YYYYMMDDTHHMMSSZ-xxxxxxxx.mp4`.
+
+10. Confirm upload in Azure Blob Storage:
+	 - Open your storage account container (default `patient-monitoring`).
+	 - Open the `videos/` path and verify the same filename appears.
+
+If motion is still not detected, go to [Raspberry Pi Hardware Troubleshooting](README.md#raspberry-pi-hardware-troubleshooting).
+
 ## Production Deployment with systemd
 
 1. Copy the repository to the Raspberry Pi, for example into `/opt/iot-patient-monitor`.
